@@ -10,6 +10,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Enums\Alignment;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Auth;
 
 class ImportModal
 {
@@ -26,6 +27,7 @@ class ImportModal
             ->label('Import')
             ->icon($icon)
             ->color('gray')
+            ->visible(fn () => Auth::user()?->role === 'admin')
             ->modalHeading('Import Data')
             ->modalWidth('lg')
             ->modalSubmitActionLabel('Simpan')

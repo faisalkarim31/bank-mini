@@ -17,7 +17,7 @@ class TransactionStats extends BaseWidget
 
     protected function getColumns(): int
     {
-        return 4;
+        return Auth::user()?->role === 'teller' ? 3 : 4;
     }
 
     protected function getStats(): array
@@ -44,36 +44,43 @@ class TransactionStats extends BaseWidget
 
         $suffix = $teller ? ' Hari Ini' : '';
 
-        return [
-            $this->card(
-                $teller ? 'Saldo Hari Ini' : 'Total Saldo',
+        $stats = [];
+
+        if (! $teller) {
+            $stats[] = $this->card(
+                'Total Saldo',
                 $saldo,
                 (clone $query)->count(),
                 'gray',
                 $saldoTrend,
-            ),
-            $this->card(
-                'Kredit' . $suffix,
-                $kredit,
-                $count(TransactionType::SetorTunai),
-                'success',
-                $kreditTrend,
-            ),
-            $this->card(
-                'Debit' . $suffix,
-                $debit,
-                $count(TransactionType::TarikTunai),
-                'warning',
-                $debitTrend,
-            ),
-            $this->card(
-                'Debit Kas' . $suffix,
-                $debitKas,
-                $count(TransactionType::TarikKas),
-                'danger',
-                $kasTrend,
-            ),
-        ];
+            );
+        }
+
+        $stats[] = $this->card(
+            'Kredit' . $suffix,
+            $kredit,
+            $count(TransactionType::SetorTunai),
+            'success',
+            $kreditTrend,
+        );
+
+        $stats[] = $this->card(
+            'Debit' . $suffix,
+            $debit,
+            $count(TransactionType::TarikTunai),
+            'warning',
+            $debitTrend,
+        );
+
+        $stats[] = $this->card(
+            'Debit Kas' . $suffix,
+            $debitKas,
+            $count(TransactionType::TarikKas),
+            'danger',
+            $kasTrend,
+        );
+
+        return $stats;
     }
 
     private function card(string $label, float $value, int $count, string $color, ?array $chart): Stat

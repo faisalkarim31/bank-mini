@@ -35,7 +35,7 @@ class AboutBank extends Page
     {
         return [
             ['icon' => 'heroicon-o-users', 'teks' => 'Tidak diperkenankan menabung atas nama orang lain.'],
-            ['icon' => 'heroicon-o-circle-stack', 'teks' => 'Isi peraturan kedua di sini.'],
+            ['icon' => 'heroicon-o-circle-stack', 'teks' => 'Tidak diperkenankan menabung atas nama orang lain.'],
             ['icon' => 'heroicon-o-arrow-path', 'teks' => 'Selalu cek jumlah saldo sebelum meninggalkan lokasi.'],
         ];
     }

@@ -85,6 +85,14 @@ class Dashboard extends BaseDashboard
 
     public function getWidgets(): array
     {
+        if (Auth::user()?->role === 'teller') {
+            return [
+                LatestTransactions::class,
+                TransactionCategoryChart::class,
+                LatestActivities::class,
+            ];
+        }
+
         return [
             TransactionChart::class,
             TransactionCategoryChart::class,

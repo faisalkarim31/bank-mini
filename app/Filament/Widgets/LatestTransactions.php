@@ -14,9 +14,12 @@ class LatestTransactions extends TableWidget
 {
     use AppliesDateFilter;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int | string | array $columnSpan = [
+        'default' => 'full',
+        'lg' => 2,
+    ];
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 1;
 
     public function table(Table $table): Table
     {

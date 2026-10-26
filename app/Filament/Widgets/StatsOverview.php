@@ -15,6 +15,11 @@ class StatsOverview extends StatsOverviewWidget
 {
     use AppliesDateFilter;
 
+    protected function getColumns(): int
+    {
+        return $this->isTeller() ? 3 : 4;
+    }
+
     protected function getStats(): array
     {
         $teller = $this->isTeller();
@@ -37,36 +42,43 @@ class StatsOverview extends StatsOverviewWidget
 
         $spark = $teller ? null : $this->sparklines();
 
-        return [
-            $this->card(
-                $teller ? 'Saldo Hari Ini' : 'Total Saldo',
+        $stats = [];
+
+        if (! $teller) {
+            $stats[] = $this->card(
+                'Total Saldo',
                 $kredit - $debit - $kas,
                 $jumlahKredit + $jumlahDebit + $jumlahKas,
                 'gray',
                 $spark['saldo'] ?? null,
-            ),
-            $this->card(
-                TransactionType::SetorTunai->label() . ($teller ? ' Hari Ini' : ''),
-                $kredit,
-                $jumlahKredit,
-                'success',
-                $spark['kredit'] ?? null,
-            ),
-            $this->card(
-                TransactionType::TarikTunai->label() . ($teller ? ' Hari Ini' : ''),
-                $debit,
-                $jumlahDebit,
-                'warning',
-                $spark['debit'] ?? null,
-            ),
-            $this->card(
-                TransactionType::TarikKas->label() . ($teller ? ' Hari Ini' : ''),
-                $kas,
-                $jumlahKas,
-                'danger',
-                $spark['kas'] ?? null,
-            ),
-        ];
+            );
+        }
+
+        $stats[] = $this->card(
+            TransactionType::SetorTunai->label() . ($teller ? ' Hari Ini' : ''),
+            $kredit,
+            $jumlahKredit,
+            'success',
+            $spark['kredit'] ?? null,
+        );
+
+        $stats[] = $this->card(
+            TransactionType::TarikTunai->label() . ($teller ? ' Hari Ini' : ''),
+            $debit,
+            $jumlahDebit,
+            'warning',
+            $spark['debit'] ?? null,
+        );
+
+        $stats[] = $this->card(
+            TransactionType::TarikKas->label() . ($teller ? ' Hari Ini' : ''),
+            $kas,
+            $jumlahKas,
+            'danger',
+            $spark['kas'] ?? null,
+        );
+
+        return $stats;
     }
 
     private function isTeller(): bool

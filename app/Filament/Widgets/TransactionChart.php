@@ -6,6 +6,7 @@ use App\Filament\Widgets\Concerns\AppliesDateFilter;
 use App\Models\Transaction;
 use Carbon\Carbon;
 use Filament\Widgets\ChartWidget;
+use Illuminate\Support\Facades\Auth;
 
 class TransactionChart extends ChartWidget
 {
@@ -14,8 +15,8 @@ class TransactionChart extends ChartWidget
     protected ?string $heading = 'Tren Transaksi';
 
     protected int | string | array $columnSpan = [
-    'default' => 'full',
-    'lg' => 2,
+        'default' => 'full',
+        'lg' => 2,
     ];
 
     protected ?string $maxHeight = '300px';
@@ -24,30 +25,49 @@ class TransactionChart extends ChartWidget
 
     protected function getData(): array
     {
-        $endInput = $this->pageFilters['endDate'] ?? null;
-        $startInput = $this->pageFilters['startDate'] ?? null;
-
-        $end = ($endInput ? Carbon::parse($endInput) : now())->endOfDay();
-        $start = ($startInput ? Carbon::parse($startInput) : $end->copy()->subDays(13))->startOfDay();
-
-        $perBulan = $start->diffInDays($end) > 31;
-        $format = $perBulan ? 'Y-m' : 'Y-m-d';
-
-        $totals = Transaction::query()
-            ->whereBetween('created_at', [$start, $end])
-            ->get(['created_at', 'amount'])
-            ->groupBy(fn ($t) => $t->created_at->format($format))
-            ->map(fn ($group) => (int) $group->sum('amount'));
-
         $labels = [];
         $data = [];
-        $cursor = $perBulan ? $start->copy()->startOfMonth() : $start->copy();
 
-        while ($cursor->lte($end)) {
-            $labels[] = $cursor->translatedFormat($perBulan ? 'M Y' : 'd M');
-            $data[] = $totals->get($cursor->format($format), 0);
+        if (Auth::user()?->role === 'teller') {
+            $start = now()->startOfDay();
+            $end = now()->endOfDay();
 
-            $perBulan ? $cursor->addMonth() : $cursor->addDay();
+            $totals = Transaction::query()
+                ->whereBetween('created_at', [$start, $end])
+                ->get(['created_at', 'amount'])
+                ->groupBy(fn ($t) => $t->created_at->format('H'))
+                ->map(fn ($group) => (int) $group->sum('amount'));
+
+            for ($hour = 0; $hour <= 23; $hour++) {
+                $key = sprintf('%02d', $hour);
+                $labels[] = $key . ':00';
+                $data[] = $totals->get($key, 0);
+            }
+        }
+        else {
+            $endInput = $this->pageFilters['endDate'] ?? null;
+            $startInput = $this->pageFilters['startDate'] ?? null;
+
+            $end = ($endInput ? Carbon::parse($endInput) : now())->endOfDay();
+            $start = ($startInput ? Carbon::parse($startInput) : $end->copy()->subDays(13))->startOfDay();
+
+            $perBulan = $start->diffInDays($end) > 31;
+            $format = $perBulan ? 'Y-m' : 'Y-m-d';
+
+            $totals = Transaction::query()
+                ->whereBetween('created_at', [$start, $end])
+                ->get(['created_at', 'amount'])
+                ->groupBy(fn ($t) => $t->created_at->format($format))
+                ->map(fn ($group) => (int) $group->sum('amount'));
+
+            $cursor = $perBulan ? $start->copy()->startOfMonth() : $start->copy();
+
+            while ($cursor->lte($end)) {
+                $labels[] = $cursor->translatedFormat($perBulan ? 'M Y' : 'd M');
+                $data[] = $totals->get($cursor->format($format), 0);
+
+                $perBulan ? $cursor->addMonth() : $cursor->addDay();
+            }
         }
 
         return [
