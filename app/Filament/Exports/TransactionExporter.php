@@ -39,6 +39,7 @@ class TransactionExporter extends DefaultValueBinder implements
 
         return Transaction::query()
             ->with(['customer'])
+            ->when($this->type, fn ($q, $t) => $q->where('type', $t instanceof \BackedEnum ? $t->value : $t))
             ->when($isTeller, fn ($q) => $q->whereDate('created_at', today()))
             ->when(! $isTeller && $this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
             ->when(! $isTeller && $this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
