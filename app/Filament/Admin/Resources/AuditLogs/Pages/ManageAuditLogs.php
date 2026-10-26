@@ -7,13 +7,20 @@ use App\Filament\Exports\AuditLogExporter;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Pages\ManageRecords;
+use Livewire\Attributes\Url;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ManageAuditLogs extends ManageRecords
 {
     protected static string $resource = AuditLogResource::class;
 
+    #[Url]
+    public ?string $roleFilter = null;
+
+    #[Url]
     public ?string $dateFrom = null;
+
+    #[Url]
     public ?string $dateUntil = null;
 
     protected function getHeaderActions(): array
@@ -62,7 +69,7 @@ class ManageAuditLogs extends ManageRecords
                 ->color('gray')
                 ->action(fn () => Excel::download(
                     new AuditLogExporter(
-                        $this->tableFilters['role']['value'] ?? null,
+                        $this->roleFilter,
                         $this->dateFrom,
                         $this->dateUntil,
                     ),

@@ -5,6 +5,7 @@ namespace App\Filament\Exports;
 use App\Enums\TransactionType;
 use App\Models\Transaction;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
@@ -14,9 +15,9 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Cell\Cell;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
 
 class TransactionExporter extends DefaultValueBinder implements
     FromQuery,
@@ -34,11 +35,13 @@ class TransactionExporter extends DefaultValueBinder implements
 
     public function query(): Builder
     {
+        $isTeller = Auth::user()?->role === 'teller';
+
         return Transaction::query()
-            ->with(['customer', 'processor'])
-            ->when($this->type, fn ($q, $t) => $q->where('type', $t))
-            ->when($this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
-            ->when($this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
+            ->with(['customer'])
+            ->when($isTeller, fn ($q) => $q->whereDate('created_at', today()))
+            ->when(! $isTeller && $this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
+            ->when(! $isTeller && $this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
             ->latest();
     }
 
@@ -66,7 +69,7 @@ class TransactionExporter extends DefaultValueBinder implements
                 ? $transaction->type->label()
                 : $transaction->type,
             $transaction->amount,
-            $transaction->processor?->full_name,
+            $transaction->processed_by ?? $transaction->processor,
         ];
     }
 

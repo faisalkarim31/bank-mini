@@ -35,11 +35,9 @@ class AuditLogResource extends Resource
     {
         return $table
             ->searchPlaceholder('Cari nama/aktivitas...')
-            // Dropdown Peran, sama seperti di tabel Pegawai
             ->toolbarActions([
                 self::filterDropdown('roleFilter', 'Semua Peran', UserResource::ROLES),
             ])
-            // Filter peran (dropdown) dan tanggal (tombol di header halaman)
             ->modifyQueryUsing(fn (Builder $query, $livewire) => $query
                 ->when($livewire->roleFilter ?? null, fn ($q, $role) => $q->whereHas('user', fn ($u) => $u->where('role', $role)))
                 ->when($livewire->dateFrom ?? null, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
