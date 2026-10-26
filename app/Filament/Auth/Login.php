@@ -22,7 +22,6 @@ class Login extends BaseLogin
                     ->autofocus(),
 
                 $this->getPasswordFormComponent(),
-                $this->getRememberFormComponent(),
             ]);
     }
 
