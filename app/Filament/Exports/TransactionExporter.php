@@ -38,11 +38,15 @@ class TransactionExporter extends DefaultValueBinder implements
         $isTeller = Auth::user()?->role === 'teller';
 
         return Transaction::query()
-            ->with(['customer'])
+            ->with('customer')
             ->when($this->type, fn ($q, $t) => $q->where('type', $t instanceof \BackedEnum ? $t->value : $t))
-            ->when($isTeller, fn ($q) => $q->whereDate('created_at', today()))
-            ->when(! $isTeller && $this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
-            ->when(! $isTeller && $this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
+            ->when(
+                $isTeller,
+                fn ($q) => $q->whereDate('created_at', today()->toDateString()),
+                fn ($q) => $q
+                    ->when($this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
+                    ->when($this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d)),
+            )
             ->latest();
     }
 
@@ -70,7 +74,7 @@ class TransactionExporter extends DefaultValueBinder implements
                 ? $transaction->type->label()
                 : $transaction->type,
             $transaction->amount,
-            $transaction->processed_by ?? $transaction->processor,
+            $transaction->processed_by,
         ];
     }
 

@@ -26,11 +26,21 @@ class ListTransactions extends ListRecords
     public ?string $dateFrom = null;
     public ?string $dateUntil = null;
 
+    public function syncStatsFilters(): void
+    {
+        $this->dispatch(
+            'transaction-filters-changed',
+            typeFilter: $this->typeFilter,
+            dateFrom: $this->dateFrom,
+            dateUntil: $this->dateUntil,
+        );
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             Action::make('filterTanggal')
-                ->label(fn() => ($this->dateFrom || $this->dateUntil)
+                ->label(fn () => ($this->dateFrom || $this->dateUntil)
                     ? trim(($this->dateFrom ?? '...') . ' s/d ' . ($this->dateUntil ?? '...'))
                     : 'Semua Tanggal')
                 ->icon('heroicon-o-calendar')
@@ -40,7 +50,7 @@ class ListTransactions extends ListRecords
                 ->modalWidth('md')
                 ->modalSubmitActionLabel('Terapkan')
                 ->modalCancelActionLabel('Batalkan')
-                ->fillForm(fn() => [
+                ->fillForm(fn () => [
                     'from' => $this->dateFrom,
                     'until' => $this->dateUntil,
                 ])
@@ -53,11 +63,12 @@ class ListTransactions extends ListRecords
                         ->label('Reset')
                         ->color('danger')
                         ->outlined()
-                        ->visible(fn() => $this->dateFrom || $this->dateUntil)
+                        ->visible(fn () => $this->dateFrom || $this->dateUntil)
                         ->action(function () {
                             $this->dateFrom = null;
                             $this->dateUntil = null;
                             $this->resetPage();
+                            $this->syncStatsFilters();
                         })
                         ->cancelParentActions(),
                 ])
@@ -65,13 +76,14 @@ class ListTransactions extends ListRecords
                     $this->dateFrom = $data['from'] ?? null;
                     $this->dateUntil = $data['until'] ?? null;
                     $this->resetPage();
+                    $this->syncStatsFilters();
                 }),
 
             Action::make('export')
                 ->label('Export')
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
-                ->action(fn() => Excel::download(
+                ->action(fn () => Excel::download(
                     new TransactionExporter($this->typeFilter, $this->dateFrom, $this->dateUntil),
                     'transaksi-' . now()->format('Ymd-His') . '.xlsx',
                 )),

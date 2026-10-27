@@ -9,17 +9,25 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 
 class LatestTransactions extends TableWidget
 {
     use AppliesDateFilter;
 
-    protected int | string | array $columnSpan = [
-        'default' => 'full',
-        'lg' => 2,
-    ];
-
     protected static ?int $sort = 1;
+
+    public function getColumnSpan(): int | string | array
+    {
+        if (Auth::user()?->role === 'teller') {
+            return [
+                'default' => 'full',
+                'lg' => 2,
+            ];
+        }
+
+        return 'full';
+    }
 
     public function table(Table $table): Table
     {

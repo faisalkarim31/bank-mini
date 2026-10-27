@@ -6,6 +6,7 @@ use App\Enums\TransactionType;
 use App\Models\Transaction;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\On;
 
@@ -14,6 +15,12 @@ class TransactionStats extends BaseWidget
     protected static bool $isDiscovered = false;
 
     protected ?string $pollingInterval = null;
+
+    public ?string $typeFilter = null;
+
+    public ?string $dateFrom = null;
+
+    public ?string $dateUntil = null;
 
     protected function getColumns(): int
     {
@@ -24,11 +31,7 @@ class TransactionStats extends BaseWidget
     {
         $teller = Auth::user()?->role === 'teller';
 
-        $query = Transaction::query();
-
-        if ($teller) {
-            $query->whereDate('created_at', today()->toDateString());
-        }
+        $query = $this->filteredQuery();
 
         $sum = fn (TransactionType $type) => (float) (clone $query)->where('type', $type->value)->sum('amount');
         $count = fn (TransactionType $type) => (clone $query)->where('type', $type->value)->count();
@@ -83,6 +86,20 @@ class TransactionStats extends BaseWidget
         return $stats;
     }
 
+    private function filteredQuery(): Builder
+    {
+        $query = Transaction::query()
+            ->when($this->typeFilter, fn ($q, $t) => $q->where('type', $t));
+
+        if (Auth::user()?->role === 'teller') {
+            return $query->whereDate('created_at', today()->toDateString());
+        }
+
+        return $query
+            ->when($this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
+            ->when($this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d));
+    }
+
     private function card(string $label, float $value, int $count, string $color, ?array $chart): Stat
     {
         $stat = Stat::make($label, 'Rp ' . number_format($value, 0, ',', '.'))
@@ -129,5 +146,13 @@ class TransactionStats extends BaseWidget
     #[On('transaction-saved')]
     public function refreshStats(): void
     {
+    }
+
+    #[On('transaction-filters-changed')]
+    public function applyFilters(?string $typeFilter = null, ?string $dateFrom = null, ?string $dateUntil = null): void
+    {
+        $this->typeFilter = $typeFilter;
+        $this->dateFrom = $dateFrom;
+        $this->dateUntil = $dateUntil;
     }
 }

@@ -7,7 +7,6 @@ use App\Filament\Admin\Resources\Transactions\Pages;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Transaction;
-use App\Models\User;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -37,7 +36,7 @@ class TransactionResource extends Resource
     protected static ?string $pluralModelLabel = 'Transaksi';
     protected static ?string $modelLabel = 'Transaksi';
 
-        public static function form(Schema $schema): Schema
+    public static function form(Schema $schema): Schema
     {
         return $schema
             ->columns(1)
@@ -101,7 +100,7 @@ class TransactionResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->searchPlaceholder('Cari nasabah...')
+            ->searchPlaceholder('Cari nasabah atau tanggal...')
             ->toolbarActions([
                 ActionGroup::make(
                     collect([null, ...TransactionType::cases()])
@@ -110,6 +109,10 @@ class TransactionResource extends Resource
                             ->action(function ($livewire) use ($type) {
                                 $livewire->typeFilter = $type?->value;
                                 $livewire->resetPage();
+
+                                if (method_exists($livewire, 'syncStatsFilters')) {
+                                    $livewire->syncStatsFilters();
+                                }
                             }))
                         ->all()
                 )
@@ -130,6 +133,24 @@ class TransactionResource extends Resource
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Waktu')
                     ->dateTime('d M Y, H:i')
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        $term = str_replace(['/', '.', ' '], '-', trim($search));
+
+                        if ($term === '' || ! preg_match('/^[\d-]+$/', $term)) {
+                            return $query->whereRaw('1 = 0');
+                        }
+
+                        $like = '%' . addcslashes($term, '%_\\') . '%';
+
+                        if (str_contains($term, '-') || strlen($term) >= 3) {
+                            return $query->whereRaw("DATE_FORMAT(created_at, '%d-%m-%Y') LIKE ?", [$like]);
+                        }
+
+                        return $query->where(function (Builder $q) use ($like) {
+                            $q->whereRaw("DATE_FORMAT(created_at, '%d') LIKE ?", [$like])
+                                ->orWhereRaw("DATE_FORMAT(created_at, '%m') LIKE ?", [$like]);
+                        });
+                    })
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('customer.full_name')
