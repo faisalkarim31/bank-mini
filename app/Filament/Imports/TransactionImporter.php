@@ -18,7 +18,9 @@ class TransactionImporter implements ToCollection, WithHeadingRow
 {
     private const DATE_FORMATS = [
         'Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d\TH:i:s', 'Y-m-d\TH:i', 'Y-m-d',
+        'm/d/Y H:i:s', 'm/d/Y H:i', 'm/d/Y',
         'd/m/Y H:i:s', 'd/m/Y H:i', 'd/m/Y',
+        'm-d-Y H:i:s', 'm-d-Y H:i', 'm-d-Y',
         'd-m-Y H:i:s', 'd-m-Y H:i', 'd-m-Y',
         'd M Y, H:i', 'd M Y H:i', 'd M Y',
         'd F Y, H:i', 'd F Y H:i', 'd F Y',
@@ -280,7 +282,11 @@ class TransactionImporter implements ToCollection, WithHeadingRow
             }
         }
 
-        return null;
+        try {
+            return Carbon::parse($text, config('app.timezone'));
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function parseAmount(mixed $value): ?float
