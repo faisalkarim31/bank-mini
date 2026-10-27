@@ -121,4 +121,22 @@ class DashboardTest extends BankTestCase
 
         $this->assertSame(3, array_sum($data['datasets'][0]['data']));
     }
+
+    // ---------- Lebar tabel Transaksi Terbaru ----------
+
+    public function test_admin_tabel_transaksi_terbaru_selebar_penuh(): void
+    {
+        $this->actingAsRole('admin', 'admin');
+
+        Livewire::test(LatestTransactions::class)
+            ->assertSeeHtml('--col-span-lg: 1 / -1');
+    }
+
+    public function test_teller_tabel_transaksi_terbaru_tidak_selebar_penuh(): void
+    {
+        $this->actingAsRole('teller', 'teller');
+
+        Livewire::test(LatestTransactions::class)
+            ->assertDontSeeHtml('--col-span-lg: 1 / -1');
+    }
 }
