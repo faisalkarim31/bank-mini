@@ -3,7 +3,7 @@
 Dokumen ini ringkasan proyek supaya developer atau AI lain bisa langsung paham tanpa membaca semua file.
 Disusun dari pembacaan kode dan hasil test otomatis. Bagian yang belum dibaca ditandai **[BELUM DIBACA]**.
 
-- Terakhir diperbarui: 26 Oktober 2026 (setelah `php artisan test`: 108 test, 101 hijau, 7 merah)
+- Terakhir diperbarui: 26 Oktober 2026
 - Lokasi dev: `D:\Aplikasi\laragon\www\bank-mini` (Windows, Laragon, PowerShell)
 
 ---
@@ -65,11 +65,12 @@ Isi: 14 nasabah (4 kategori, 2 nonaktif), sekitar 100 transaksi tersebar 1 sampa
 | Edit transaksi | ✅ (hanya jika nasabah aktif) | ❌ |
 | Riwayat aktivitas (audit log) | ✅ | ❌ |
 | Kelola pegawai (Users) | ❌ **Dinonaktifkan** (`UserResource::canAccess()` = false, `/admin/users` selalu 403) | ❌ |
-| Export (nasabah, transaksi, audit log) | ✅ | ✅ Export transaksi, tetapi **semua tanggal** (bug 2) |
-| Import (nasabah, transaksi) | ✅ | ✅ Import transaksi boleh tanggal lampau. **Keputusan 26 Okt: import hanya admin** (CR-2, belum dikerjakan, lihat bagian 8) |
+| Export (nasabah, transaksi, audit log) | ✅ | ✅ Export transaksi hanya hari ini (sudah diperbaiki) |
+| Import (nasabah, transaksi) | ✅ | ✅ Import transaksi boleh tanggal lampau (**pertanyaan klien**, lihat bagian 8) |
 | Dashboard: kartu angka | ✅ semua tanggal + filter | ✅ hanya hari ini |
-| Dashboard: tabel terbaru, grafik tren, grafik kategori | ✅ semua tanggal + filter | ❌ seharusnya hanya hari ini, **saat ini semua tanggal** (bug 4) |
-| Riwayat transaksi di detail nasabah | ✅ | ✅ semua tanggal (sengaja dibiarkan, mengikuti pola umum, tunggu konfirmasi klien, lihat bagian 8) |
+| Dashboard: tabel terbaru, grafik kategori | ✅ semua tanggal + filter | ✅ hanya hari ini (sudah diperbaiki) |
+| Dashboard: grafik tren | ✅ semua tanggal + filter | ❌ disembunyikan |
+| Riwayat transaksi di detail nasabah | ✅ | ✅ semua tanggal (**pertanyaan klien**, lihat bagian 8) |
 | Halaman "Tentang Bank" | ✅ | ✅ |
 
 Penentu akses panel: `User::canAccessPanel()`.
@@ -273,9 +274,10 @@ Filament/
 - Resource Admin memakai pola "form/tabel/infolist langsung di Resource". File `Schemas/CustomerForm.php`, `Tables/CustomersTable.php`, `Schemas/TransactionForm.php`, `Tables/TransactionsTable.php` adalah scaffold bawaan Filament dan **tidak dipakai** (kode mati).
 - `Pages/CreateCustomer`, `EditCustomer`, `CreateTransaction`, `EditTransaction` tidak terdaftar di `getPages()`, jadi juga kode mati. Create dan edit berjalan lewat aksi modal di halaman List.
 - Belum ada `app/Policies` dan belum ada Form Request.
-- `Dashboard` Teller memakai ulang `Dashboard` Admin. Widget mengecek `Auth::user()->role` sendiri-sendiri, dan tidak semuanya melakukannya (bug 4).
+- `Dashboard` Teller memakai ulang `Dashboard` Admin. Daftar widget ditentukan per role di `Dashboard::getWidgets()` (teller: Transaksi Terbaru, Kategori, Aktivitas Terbaru yang tersaring `canView` admin saja). Urutan tampil mengikuti urutan array itu, bukan `$sort` widget.
+- Widget memakai satu properti `$columnSpan` untuk semua role. Perubahan lebar untuk teller ikut kena ke admin (bug 8).
 - Ada dua widget kartu dengan logika hampir sama: `StatsOverview` (Dashboard) dan `TransactionStats` (halaman Transaksi).
-- Trait `AppliesDateFilter` hanya membaca filter tanggal dari halaman, **tidak mengecek role**. Untuk teller (tanpa filter tanggal) hasilnya semua tanggal.
+- Trait `AppliesDateFilter` versi awal hanya membaca filter tanggal dari halaman, tidak mengecek role (akar bug 4, sudah diperbaiki; versi terbaru belum dibaca ulang).
 - Importer menyimpan "Diproses oleh" sebagai teks bebas. Nasabah baru dari import selalu saldo 0, kolom saldo di file diabaikan.
 - Saldo awal nasabah dari data lama dimasukkan sebagai transaksi setor (Kredit), bukan lewat import nasabah.
 
@@ -283,38 +285,44 @@ Filament/
 
 ## 8. Temuan dan Catatan Potensi Bug
 
-### Bug terbukti (ada test merah, menunggu perbaikan)
+### Bug terbuka (4 test merah)
 
-| # | Bug | Lokasi | Test | Fix singkat |
+| # | Bug | Lokasi | Test merah | Fix singkat |
 |---|---|---|---|---|
-| 1 | Export transaksi: kolom "Diproses oleh" kosong. Exporter membaca `processor?->full_name` (relasi ke users), padahal `processed_by` teks bebas sesuai permintaan klien. Sisa kode lama. | `Exports/TransactionExporter.php`, `Models/Transaction::processor()` | `ExporterQueryTest > kolom diproses oleh berisi nama pegawai` | `map()` baca `$transaction->processed_by`, buang `'processor'` dari `with()`. Relasi `processor()` boleh dihapus |
-| 2 | Teller bisa export transaksi semua tanggal (tabel sudah dibatasi hari ini, export tidak). | `Exports/TransactionExporter.php` | `ExportActionTest > export transaksi teller hanya hari ini` | Di `query()`: `->when(Auth::user()?->role === 'teller', fn ($q) => $q->whereDate('created_at', today()))` |
-| 3 | Filter peran Riwayat Aktivitas tidak tersimpan (`$roleFilter` tidak dideklarasikan). Export juga membaca `tableFilters['role']`, bukan `roleFilter`. | `AuditLogs/Pages/ManageAuditLogs.php` | `AuditLogTest::test_filter_peran` | Tambah `public ?string $roleFilter = null;`, export pakai `$this->roleFilter` |
-| 4 | Dashboard teller menampilkan data semua tanggal: tabel "Transaksi Terbaru", grafik "Tren Transaksi" (14 hari), grafik "Kategori Transaksi". Kartu angka sudah benar. | `Widgets/LatestTransactions`, `TransactionChart`, `TransactionCategoryChart`, `Concerns/AppliesDateFilter` | `DashboardTest` (3 test teller) | Batasi hari ini untuk teller di `applyDateFilter`. `TransactionChart` tidak memakai trait itu, batasi sendiri. Cek juga Export PDF dashboard |
-| 5 | Teks placeholder "Isi peraturan kedua di sini." di Tentang Bank. | `Admin/Pages/AboutBank::getPeraturan()` | `AboutBankTest` | Isi dari klien, atau hapus poin |
+| 6 | Export transaksi admin mengabaikan filter tanggal. Filter "Sampai" menghasilkan file kosong, filter "Dari" mengeluarkan semua tanggal. Regresi dari perbaikan bug 1 dan 2: `->when(! $isTeller && $this->dateFrom, fn ($q, $d) => ...)` membuat `$d` bernilai `true` (hasil `&&`), bukan tanggalnya. | `Exports/TransactionExporter::query()` | `ExporterQueryTest > export transaksi filter tanggal` | Pakai `fn ($q) => $q->whereDate('created_at', '>=', $this->dateFrom)` (dan `<=` untuk `dateUntil`). Hapus juga fallback `?? $transaction->processor` di `map()` |
+| 7 | Kartu ringkasan di halaman Transaksi tidak ikut filter tabel (admin). `TransactionStats` tidak punya pendengar filter dan `ListTransactions` tidak mengirim event filter ke kartu. Di Dashboard dan detail nasabah kartu serupa sudah ikut filter. **Menunggu konfirmasi klien/desainer** (ikut filter atau tetap total dengan label periode). | `Widgets/TransactionStats`, `Transactions/Pages/ListTransactions` | `TransactionStatsTest` (filter tanggal, filter jenis) | Kirim event `transaction-filters-updated` dari halaman, widget mendengarkan dan menerapkan `dateFrom`, `dateUntil`, `type` seperti `CustomerTransactionStatsWidget` |
+| 8 | Tabel "Transaksi Terbaru" di Dashboard admin tidak selebar penuh (2 kolom, ruang kosong di kanan). Regresi dari perubahan layout teller: `$columnSpan` `lg => 2` berlaku untuk semua role. | `Widgets/LatestTransactions` | `DashboardTest > admin tabel transaksi terbaru selebar penuh` | Lebar per role: admin `full`, teller 2 kolom, misal lewat `getColumnSpan()` (nama method perlu dicek di versi Filament yang dipakai) |
+
+### Bug yang sudah diperbaiki (test hijau, sekarang berfungsi sebagai regresi)
+
+| # | Bug | Test |
+|---|---|---|
+| 1 | Export transaksi: kolom "Diproses oleh" kosong (exporter membaca relasi `processor`, padahal `processed_by` teks bebas) | `ExporterQueryTest > kolom diproses oleh berisi nama pegawai` |
+| 2 | Teller bisa export transaksi semua tanggal | `ExportActionTest > export transaksi teller hanya hari ini` |
+| 3 | Filter peran Riwayat Aktivitas tidak tersimpan (`$roleFilter` tidak dideklarasikan) | `AuditLogTest::test_filter_peran` |
+| 4 | Dashboard teller menampilkan data semua tanggal (tabel terbaru, grafik tren, grafik kategori). Perbaikan: grafik tren disembunyikan dari teller, sisanya dibatasi hari ini | `DashboardTest` (teller) |
+| 5 | Teks placeholder "Isi peraturan kedua di sini." di Tentang Bank | `AboutBankTest` |
 
 ### Change request
 
 | # | Usulan | Status |
 |---|---|---|
 | CR-1 | Hapus kartu "Saldo Hari Ini" (teller) di Dashboard dan halaman Transaksi. Isinya selisih Kredit − Debit − Debit Kas, bukan saldo, bisa minus dan menyesatkan. Kartu admin "Total Saldo" belum diputuskan (ikut dihapus atau tidak). Desain Figma perlu disesuaikan. | Menunggu persetujuan |
-| CR-2 | Import hanya untuk admin (nasabah dan transaksi), mengikuti standar aplikasi perbankan. Fix singkat: di `Support/ImportModal::make()` tambah `->visible(fn () => Auth::user()?->role === 'admin')`. Satu tempat, berlaku untuk semua halaman yang memakai import. Test: `Feature/Imports/ImportAccessTest` (2 test teller merah sampai dikerjakan). | Diputuskan internal, test sudah ada, belum dikerjakan |
 
 ### Pertanyaan untuk klien
 
-| # | Pertanyaan | Status |
-|---|---|---|
-| 1 | Teller boleh import transaksi? | **Terjawab: tidak, admin saja** (jadi CR-2, tidak perlu tanya klien) |
-| 2 | Riwayat transaksi di detail nasabah untuk teller: hari ini saja atau semua tanggal? | **Diputuskan: tetap semua tanggal** (setuju internal). Alasan: biarkan semua tanggal. Di aplikasi perbankan umum, pembatasan teller ada di edit/hapus, bukan di melihat mutasi, karena teller perlu cek riwayat saat nasabah bertanya. Kalau klien ingin ketat, ikuti aturan menu Transaksi (hari ini) dan kartu total ikut dibatasi |
-| 3 | Nama kelas (X IPA dan sebagainya) dari data Excel klien perlu disimpan? | **Ditunda.** Kalau nanti perlu: kolom "Kelas" opsional di nasabah dan di import |
-| 4 | Label kategori Staff tampil "Kelas". | **Bukan bug.** Terkonfirmasi di kode (`app/Enums/CustomerCategory.php` baris 17, `self::Staff => 'Kelas'`) dan sesuai Figma (Figma tidak punya "Staff"). Nilai internal tetap `staff` (kode rekening `03`), tersimpan di database, dipakai importer, seeder, dan test, jadi tidak di-rename. Alasan beda nama belum jelas: repo git hanya punya 1 commit, tidak ada riwayat. Bisa ditanyakan ke dev. Opsional nanti: tiket IMP prioritas rendah untuk menyamakan nama internal dan label |
+1. Teller boleh import transaksi? Sekarang bisa memasukkan transaksi tanggal lampau (importer hanya menolak tanggal masa depan).
+2. Riwayat transaksi di detail nasabah untuk teller dibatasi hari ini atau semua tanggal? Sekarang semua tanggal, plus total kredit dan debit.
+3. Nama kelas (X IPA dan sebagainya) dari data Excel klien perlu disimpan? Kategori nasabah hanya 4 jenis (siswa, guru, staff, lainnya), dan jadi kode nomor rekening.
+4. Label kategori Staff tampil "Kelas". Sengaja atau typo?
+5. Kartu ringkasan di halaman Transaksi (admin) ikut filter tabel, atau tetap total semua tanggal dengan label periode? (menentukan bentuk perbaikan bug 7)
 
 ### Catatan lain
 
 | Temuan | Status |
 |---|---|
 | `processed_by` teks bebas, siapa pun bisa ketik nama sembarang. | Disengaja (permintaan klien). Relasi `processor()` sisa kode lama |
-| Karakter `Â·` di audit log dan pesan import. | **Bukan bug.** Dicek 26 Okt dengan pencarian kode: tidak ada `Â·` di folder `app/`. Titik tengah `·` tersimpan benar di 3 tempat (`TransactionResource.php:210`, `ListTransactions.php:121`, `TransactionImporter.php:162`). Temuan awal kemungkinan artefak saat file disalin lewat terminal |
+| Karakter `Â·` pada `target_name` audit log (`ListTransactions`) dan pesan import "Transaksi sudah ada" (`TransactionImporter`). Kemungkinan artefak encoding, file harus UTF-8. | Perlu cek |
 | Model `Customer` mengabaikan `balance`, `is_active`, `created_by` saat create. Create tanpa user login gagal (created_by NOT NULL). | Disengaja, gotcha |
 | `AuditLog.user_id` NOT NULL. `AuditLog::record()` tanpa user login akan error. | Gotcha |
 | `CustomerStatsWidget`: grafik mini "Nasabah Aktif" dan "Nonaktif" memakai angka karangan (komentar `placeholder visual` di kode). | Ringan, menyesatkan |
@@ -325,6 +333,8 @@ Filament/
 | Import transaksi menolak transaksi identik (nasabah, jenis, nominal, menit sama) sebagai duplikat. Dua setoran sah di menit yang sama ikut terblokir. | Perilaku disengaja |
 | Import transaksi sudah mengecek saldo sebelum tarik (aman dari saldo minus) dan memproses urut tanggal, bukan urutan baris. | Terverifikasi test |
 | Halaman detail nasabah tidak punya tombol Export. | Terverifikasi dari kode |
+| `TransactionChart` masih punya cabang untuk teller (tren per jam), padahal grafik ini tidak ditampilkan ke teller. | Kode mati, aman |
+| Aplikasi diuji di SQLite, produksi MySQL. Bug 6 contohnya: filter "Dari" lolos di test karena SQLite membandingkan tanggal dengan `true` tanpa error, sedangkan di MySQL filter "Sampai" menghasilkan nol baris. Perilaku perbandingan bisa berbeda antar database | Gotcha, hati-hati pada kondisi `&&` di dalam `->when()` |
 
 ---
 
@@ -354,18 +364,18 @@ tests/
 │  ├─ Exports/                  ExporterQueryTest
 │  └─ Models/                   TransactionBalanceTest
 └─ Feature/                     alur lewat Livewire/HTTP, satu folder per domain
+   ├─ Auth/                     PanelAccessTest, LoginTest
    ├─ AboutBank/                AboutBankTest
    ├─ AuditLogs/                AuditLogTest
-   ├─ Auth/                     PanelAccessTest, LoginTest
    ├─ Customers/                CustomerTest, CustomerDetailTest
    ├─ Dashboard/                DashboardTest
    ├─ Exports/                  ExportActionTest
-   ├─ Imports/                  CustomerImportTest, TransactionImportTest, ImportAccessTest
-   └─ Transactions/             TransactionTest
+   ├─ Imports/                  CustomerImportTest, TransactionImportTest
+   └─ Transactions/             TransactionTest, TransactionStatsTest
 ```
 
 Aturan menambah test:
-1. Folder mengikuti **domain/menu**, bukan tipe teknis. Fitur baru → folder baru di `Feature/`.
+1. Folder mengikuti **domain**, bukan tipe teknis. Fitur baru → folder baru di `Feature/`.
 2. Namespace mengikuti folder (`Tests\Feature\Customers`).
 3. Class turunan `Tests\Support\BankTestCase` bila perlu database. Test enum murni boleh langsung `PHPUnit\Framework\TestCase`.
 4. Nama method: `test_<perilaku_dalam_bahasa_indonesia>`. Satu method menguji satu perilaku.
@@ -377,7 +387,7 @@ Aturan menambah test:
 |---|---|
 | `actingAsRole($role, $panel = null, $attrs = [])` | Buat user, login, set panel Filament aktif |
 | `makeCustomer($attrs)` | Buat nasabah. `balance` dan `is_active` diset lewat update setelah create (karena hook `creating` memaksa nilai default). Otomatis login admin kalau belum ada user login |
-| `makeTransaction($customer, $type, $amount, $at)` | Buat transaksi, hook `created` ikut mengubah saldo. `$at` untuk transaksi bertanggal lampau |
+| `makeTransaction($customer, $type, $amount, $at)` | Buat transaksi, hook `created` ikut mengubah saldo. `$type` harus enum `TransactionType` (bukan string). `$at` (Carbon) untuk transaksi bertanggal lampau |
 | `balanceOf($customer)` | Saldo terbaru sebagai float |
 
 `setUp()` memanggil `withoutVite()` supaya test tidak butuh `npm run build`.
@@ -389,50 +399,53 @@ Aturan menambah test:
 - Filter diuji dengan `->set('categoryFilter', 'guru')`, bukan `filterTable()`.
 - Hook `Transaction::created` mengubah saldo, jadi hitung saldo awal dengan memperhitungkan transaksi yang dibuat helper.
 - Membandingkan saldo: pakai cast float (`balanceOf`). Kolom decimal bisa berupa string.
+- Importer diuji langsung: `(new XImporter)->collection(collect([...baris sebagai array berkunci judul kolom...]))`, lalu cek `->imported` dan `->failures` (kunci `reason`). Perlu user login (`actingAsRole`) karena `Customer::create` butuh `created_by`.
+- Widget statistik/chart diuji lewat `Livewire::test(Widget::class)->instance()` lalu memanggil method protected dengan closure: `(fn () => $this->getStats())->call($instance)` atau `getData()`. Label dan nilai kartu dibaca dari `$stat->getLabel()` dan `$stat->getValue()`.
+- Widget tabel: `Livewire::test(LatestTransactions::class)->assertCanSeeTableRecords([...])`. Lebar widget dicek dari atribut `--col-span-lg` di HTML.
+- Relation manager: `Livewire::test(TransactionsRelationManager::class, ['ownerRecord' => $customer, 'pageClass' => ViewCustomer::class])`. Filter dikirim lewat `->call('applyFilters', $from, $until, $type)`.
+- Kontrak filter widget detail nasabah: event `transaction-filters-updated` (`from`, `until`, `type`). Mengirim event ke widget yang tidak punya pendengar melempar `EventHandlerDoesNotExist`.
+- Test berjalan di SQLite. Perilaku perbandingan tipe bisa beda dengan MySQL produksi (lihat bug 6), jadi cek manual di browser tetap perlu untuk filter tanggal.
 
-### Inventaris test (112 test. Terakhir dijalankan 26 Oktober 2026 sebelum `ImportAccessTest`: 108 test, 101 hijau, 7 merah. Dengan `ImportAccessTest` seharusnya 112 test, 9 merah)
+### Inventaris test (118 test. 114 hijau, 4 merah: bug 6, 7, 8)
 
-Semua yang merah adalah bug terbukti atau CR di bagian 8. Tidak ada merah di luar daftar itu.
+| File | Jumlah | Cakupan |
+|---|:-:|---|
+| `Feature/Auth/PanelAccessTest` | 7 | Guest redirect, admin/teller akses panel sendiri, halaman pegawai selalu 403, silang panel ditolak, user nonaktif ditolak |
+| `Feature/Auth/LoginTest` | 3 | Login sukses + audit log, password salah, user nonaktif |
+| `Feature/Customers/CustomerTest` | 11 | Lihat, search nama/rekening, filter kategori/status, tambah, nomor rekening auto, validasi, edit, toggle aktif, detail, teller tambah/edit, teller tidak bisa toggle |
+| `Feature/Customers/CustomerDetailTest` | 9 | Halaman detail, riwayat hanya milik nasabah itu, filter jenis/tanggal/gabungan/reset, kartu statistik per jenis dan mengikuti filter |
+| `Feature/Transactions/TransactionTest` | 18 | Tambah setor/tarik, saldo berubah, tarik > saldo ditolak (tunai dan kas), nominal minimum, field wajib, nasabah nonaktif ditolak, teller tambah, search, filter jenis/tanggal, teller hanya hari ini, edit hanya admin, edit nominal/jenis menyesuaikan saldo, edit bikin saldo minus ditolak |
+| `Feature/Transactions/TransactionStatsTest` | 4 | Kartu ringkasan halaman Transaksi: tanpa filter, ikut filter tanggal, ikut filter jenis (**2 merah, bug 7**), teller tetap hari ini |
+| `Feature/AuditLogs/AuditLogTest` | 4 | Lihat + search aksi, search nama pengguna, filter peran, filter tanggal |
+| `Feature/Dashboard/DashboardTest` | 9 | Kartu statistik teller/admin, tabel terbaru/tren/kategori teller hanya hari ini, admin semua tanggal, lebar tabel terbaru admin (**1 merah, bug 8**) dan teller |
+| `Feature/AboutBank/AboutBankTest` | 1 | Tidak ada teks placeholder di Peraturan |
+| `Feature/Imports/CustomerImportTest` | 8 | Import berhasil, kategori nilai/label, saldo awal 0 + created_by, nama kembar, kategori tidak dikenal, nama kosong/panjang |
+| `Feature/Imports/TransactionImportTest` | 17 | Saldo dan data dari file, jenis nilai/label, tarik > saldo ditolak, urut tanggal bukan urut baris, saldo tak pernah minus, nasabah tidak ada/nonaktif/kembar, tanggal masa depan/format/kosong, nominal rupiah/tidak valid, duplikat, baris kosong |
+| `Feature/Exports/ExportActionTest` + `Unit/Exports/ExporterQueryTest` | 18 | Query dan kolom exporter, aksi export (download), teller hanya hari ini, filter tanggal (**1 merah, bug 6**) |
+| `Unit/Enums/CustomerCategoryTest` | 3 | Kode kategori, kode unik, options |
+| `Unit/Enums/TransactionTypeTest` | 2 | `isCredit`, options |
+| `Unit/Models/TransactionBalanceTest` | 4 | `balanceIfChangedTo`, saldo otomatis, kode transaksi harian |
 
-| File | Jumlah | Merah | Cakupan |
-|---|:-:|:-:|---|
-| `Feature/Auth/PanelAccessTest` | 7 | 0 | Guest redirect, admin/teller akses panel sendiri, halaman pegawai selalu 403, silang panel ditolak, user nonaktif ditolak |
-| `Feature/Auth/LoginTest` | 3 | 0 | Login sukses + audit log, password salah, user nonaktif |
-| `Feature/Customers/CustomerTest` | 11 | 0 | Lihat, search nama/rekening, filter kategori/status, tambah, nomor rekening auto, validasi, edit, toggle aktif, detail, teller tambah/edit, teller tidak bisa toggle |
-| `Feature/Customers/CustomerDetailTest` | 10 | 0 | Detail nasabah, riwayat hanya milik nasabah itu, filter jenis/tanggal/gabungan/reset, kartu statistik per jenis dan mengikuti filter |
-| `Feature/Transactions/TransactionTest` | 18 | 0 | Tambah setor/tarik, saldo berubah, tarik > saldo ditolak (tunai dan kas), nominal minimum, field wajib, nasabah nonaktif ditolak, teller tambah, search, filter jenis/tanggal, teller hanya hari ini, edit hanya admin, edit nominal/jenis menyesuaikan saldo, edit bikin saldo minus ditolak |
-| `Feature/AuditLogs/AuditLogTest` | 4 | 1 | Lihat + search aksi, search nama pengguna, filter peran (**merah, bug 3**), filter tanggal |
-| `Feature/Exports/ExportActionTest` | 4 | 1 | Export nasabah/transaksi/riwayat mengikuti filter, export teller hanya hari ini (**merah, bug 2**) |
-| `Unit/Exports/ExporterQueryTest` | 9 | 1 | Query dan isi baris tiap exporter, kolom "Diproses oleh" (**merah, bug 1**) |
-| `Feature/Dashboard/DashboardTest` | 7 | 3 | Kartu statistik teller/admin, tabel terbaru, tren, kategori. Tiga test teller merah (**bug 4**) |
-| `Feature/AboutBank/AboutBankTest` | 1 | 1 | Peraturan tidak berisi teks placeholder (**merah, bug 5**) |
-| `Feature/Imports/CustomerImportTest` | 8 | 0 | Import berhasil, kategori nilai/label, saldo nol, duplikat nama, kategori tak dikenal, nama kosong/terlalu panjang |
-| `Feature/Imports/ImportAccessTest` | 4 | 2 | Admin melihat import nasabah dan transaksi. Teller tidak boleh (**merah, CR-2**) |
-| `Feature/Imports/TransactionImportTest` | 17 | 0 | Setor/tarik, saldo tidak minus, urut tanggal, nasabah tak ditemukan/nonaktif/kembar, tanggal masa depan/format Indonesia, nominal rupiah, duplikat, baris kosong |
-| `Unit/Enums/CustomerCategoryTest` | 3 | 0 | Kode kategori, kode unik, options |
-| `Unit/Enums/TransactionTypeTest` | 2 | 0 | `isCredit`, options |
-| `Unit/Models/TransactionBalanceTest` | 4 | 0 | `balanceIfChangedTo`, saldo otomatis, kode transaksi harian |
-
-Test merah **sengaja dibiarkan merah** sampai dev mengambil tiketnya. Begitu satu tiket dikerjakan, test-nya harus hijau. Kalau perlu suite hijau sementara, pakai `markTestSkipped('Bug tiket ...')` dan catat di sini supaya tidak lupa dilepas.
-
-### Roadmap test
+### Roadmap test (bertahap)
 
 | Fase | Isi | Status |
 |---|---|---|
 | 1 | Struktur test, base class, akses panel, login | ✅ Hijau |
 | 2 | Nasabah (CRUD, search, filter, role) | ✅ Hijau |
 | 3 | Transaksi (create, validasi, saldo, edit, role) | ✅ Hijau |
-| 4 | Audit log | ✅ Dijalankan, 1 merah (bug 3) |
-| 5 | Jalankan semua | ✅ 108 test, 7 merah, semua bug terbukti |
-| 6 | Users resource | ⏸ Fitur disembunyikan, test hanya memastikan 403 |
-| 7 | Export | ✅ Selesai, 2 merah (bug 1, 2) |
-| 8 | Import | ✅ Hijau |
-| 9 | Dashboard, detail nasabah, Tentang Bank | ✅ Selesai, 4 merah (bug 4, 5) |
-| 10 | Regresi temuan bagian 8 | ✅ Terwakili oleh test merah di atas |
-| 11 | Setelah dev memperbaiki | ⬜ Jalankan ulang semua. Tambah test untuk CR-1 (kartu saldo hilang). Test CR-2 sudah ada di `ImportAccessTest` |
+| 4 | Audit log (lihat, search, filter) | ✅ Hijau |
+| 5 | Jalankan semua dan perbaiki yang merah | ✅ 114 dari 118 hijau, 4 merah = bug terbuka 6, 7, 8 |
+| 6 | Users resource (kelola pegawai) | ⏸ Disembunyikan (tidak dipakai klien). Test hanya memastikan 403 |
+| 7 | Export (nasabah, transaksi, audit log) | ✅ Selesai |
+| 8 | Import (nasabah, transaksi) | ✅ Hijau |
+| 9 | Widget dashboard, detail nasabah, Tentang Bank, kartu halaman Transaksi | ✅ Selesai (bug 4, 5 diperbaiki, bug 7, 8 terbuka) |
+| 10 | Regresi untuk temuan di bagian 8 | ⏳ Test merah 6, 7, 8 jadi bukti. Hijau semua setelah dev memperbaiki |
+
+Setelah bug 6, 7, 8 diperbaiki, jalankan `php artisan test` sekali lagi. Targetnya 118 hijau.
+
+---
 
 ## 10. Belum Dibaca (konteks yang masih kosong)
 
-Sudah dibaca dan dites: `Exports/`, `Imports/`, `Widgets/*`, `Pages/Dashboard`, `Pages/AboutBank`, `Support/ImportModal`.
-
-Masih belum dibaca: `Support/HeadStyles`, view hook `resources/views/filament/admin/hooks/*`, `routes/web.php`, `composer.json`. Isinya kemungkinan tampilan saja, risiko bug logika rendah. Perbarui bagian 2 dan 7 kalau ternyata ada aturan akses di sana.
+`Exports/CustomerExporter`, `UserExporter`, `AuditLogExporter` (sebagian), versi terbaru trait `Widgets/Concerns/AppliesDateFilter` (setelah perbaikan bug 4), `window.exportDashboardPdf` (JS export PDF Dashboard, dugaan ikut membawa data bila widget bocor, perlu dicek manual di teller), view hook `resources/views/filament/admin/hooks/*`, `routes/web.php`, `composer.json`, `Support/HeadStyles` (hanya CSS).
+Saat bagian-bagian ini dibaca, perbarui tabel hak akses (bagian 2), struktur (bagian 7), dan roadmap (bagian 9).
