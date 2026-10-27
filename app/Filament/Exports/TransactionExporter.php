@@ -3,7 +3,6 @@
 namespace App\Filament\Exports;
 
 use App\Enums\TransactionType;
-use App\Models\Transaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Concerns\FromQuery;
@@ -28,26 +27,18 @@ class TransactionExporter extends DefaultValueBinder implements
     WithCustomValueBinder
 {
     public function __construct(
-        protected ?string $type = null,
-        protected ?string $dateFrom = null,
-        protected ?string $dateUntil = null,
+        protected Builder $tableQuery,
     ) {}
 
     public function query(): Builder
     {
-        $isTeller = Auth::user()?->role === 'teller';
+        $query = clone $this->tableQuery;
 
-        return Transaction::query()
-            ->with('customer')
-            ->when($this->type, fn ($q, $t) => $q->where('type', $t instanceof \BackedEnum ? $t->value : $t))
-            ->when(
-                $isTeller,
-                fn ($q) => $q->whereDate('created_at', today()->toDateString()),
-                fn ($q) => $q
-                    ->when($this->dateFrom, fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
-                    ->when($this->dateUntil, fn ($q, $d) => $q->whereDate('created_at', '<=', $d)),
-            )
-            ->latest();
+        if (Auth::user()?->role === 'teller') {
+            $query->whereDate('created_at', today()->toDateString());
+        }
+
+        return $query->with('customer');
     }
 
     public function headings(): array
@@ -110,13 +101,13 @@ class TransactionExporter extends DefaultValueBinder implements
     public function columnWidths(): array
     {
         return [
-            'A' => 18, // ID Transaksi
-            'B' => 22, // Waktu
-            'C' => 25, // Nasabah
-            'D' => 18, // No. Rekening
-            'E' => 18, // Jenis Transaksi
-            'F' => 15, // Nominal
-            'G' => 18, // Diproses oleh
+            'A' => 18,
+            'B' => 22,
+            'C' => 25,
+            'D' => 18,
+            'E' => 18,
+            'F' => 15,
+            'G' => 18,
         ];
     }
 }

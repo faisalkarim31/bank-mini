@@ -84,7 +84,7 @@ class ListTransactions extends ListRecords
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('gray')
                 ->action(fn () => Excel::download(
-                    new TransactionExporter($this->typeFilter, $this->dateFrom, $this->dateUntil),
+                    new TransactionExporter($this->getFilteredSortedTableQuery()),
                     'transaksi-' . now()->format('Ymd-His') . '.xlsx',
                 )),
 
