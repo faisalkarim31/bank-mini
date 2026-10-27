@@ -134,22 +134,70 @@ class TransactionResource extends Resource
                     ->label('Waktu')
                     ->dateTime('d M Y, H:i')
                     ->searchable(query: function (Builder $query, string $search): Builder {
-                        $term = str_replace(['/', '.', ' '], '-', trim($search));
+                        $search = strtolower(trim($search));
 
-                        if ($term === '' || ! preg_match('/^[\d-]+$/', $term)) {
-                            return $query->whereRaw('1 = 0');
+                        if ($search === '') {
+                            return $query;
                         }
 
+                        $months = [
+                            'jan' => 1, 'januari' => 1,
+                            'feb' => 2, 'februari' => 2,
+                            'mar' => 3, 'maret' => 3,
+                            'apr' => 4, 'april' => 4,
+                            'mei' => 5,
+                            'jun' => 6, 'juni' => 6,
+                            'jul' => 7, 'juli' => 7,
+                            'agu' => 8, 'agustus' => 8, 'agt' => 8,
+                            'sep' => 9, 'september' => 9,
+                            'okt' => 10, 'oktober' => 10,
+                            'nov' => 11, 'november' => 11,
+                            'des' => 12, 'desember' => 12,
+                        ];
+
+                        $words = preg_split('/\s+/', $search);
+                        $parsedDay = null;
+                        $parsedMonth = null;
+                        $parsedYear = null;
+
+                        foreach ($words as $word) {
+                            $cleanWord = trim($word, '.,/-');
+
+                            if (isset($months[$cleanWord])) {
+                                $parsedMonth = $months[$cleanWord];
+                            } elseif (is_numeric($cleanWord)) {
+                                $val = (int) $cleanWord;
+
+                                if ($val > 31 || strlen($cleanWord) === 4) {
+                                    $parsedYear = $val;
+                                } elseif ($val >= 1 && $val <= 31) {
+                                    if ($parsedDay === null) {
+                                        $parsedDay = $val;
+                                    } elseif ($parsedMonth === null && $val <= 12) {
+                                        $parsedMonth = $val;
+                                    }
+                                }
+                            }
+                        }
+
+                        if ($parsedDay !== null || $parsedMonth !== null || $parsedYear !== null) {
+                            return $query->where(function (Builder $q) use ($parsedDay, $parsedMonth, $parsedYear) {
+                                if ($parsedDay !== null) {
+                                    $q->whereRaw("DATE_FORMAT(created_at, '%e') = ?", [$parsedDay]);
+                                }
+                                if ($parsedMonth !== null) {
+                                    $q->whereRaw("DATE_FORMAT(created_at, '%c') = ?", [$parsedMonth]);
+                                }
+                                if ($parsedYear !== null) {
+                                    $q->whereRaw("YEAR(created_at) = ?", [$parsedYear]);
+                                }
+                            });
+                        }
+
+                        $term = str_replace(['/', '.', ' '], '-', $search);
                         $like = '%' . addcslashes($term, '%_\\') . '%';
 
-                        if (str_contains($term, '-') || strlen($term) >= 3) {
-                            return $query->whereRaw("DATE_FORMAT(created_at, '%d-%m-%Y') LIKE ?", [$like]);
-                        }
-
-                        return $query->where(function (Builder $q) use ($like) {
-                            $q->whereRaw("DATE_FORMAT(created_at, '%d') LIKE ?", [$like])
-                                ->orWhereRaw("DATE_FORMAT(created_at, '%m') LIKE ?", [$like]);
-                        });
+                        return $query->whereRaw("DATE_FORMAT(created_at, '%d-%m-%Y') LIKE ?", [$like]);
                     })
                     ->sortable(),
 
