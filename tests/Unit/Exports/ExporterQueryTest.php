@@ -8,6 +8,7 @@ use App\Filament\Exports\AuditLogExporter;
 use App\Filament\Exports\CustomerExporter;
 use App\Filament\Exports\TransactionExporter;
 use App\Models\AuditLog;
+use App\Models\Transaction;
 use App\Models\User;
 use Tests\Support\BankTestCase;
 
@@ -53,31 +54,36 @@ class ExporterQueryTest extends BankTestCase
     }
 
     // ---------- TransactionExporter ----------
+    // TransactionExporter menerima query tabel yang sudah terfilter (Builder).
+    // Filter dipasang pemanggil, exporter hanya memakai query itu.
 
-    public function test_export_transaksi_filter_jenis(): void
+    public function test_export_transaksi_memakai_query_yang_diberikan_filter_jenis(): void
     {
         $this->actingAsRole('admin');
         $customer = $this->makeCustomer(['balance' => 100000]);
         $this->makeTransaction($customer, TransactionType::SetorTunai, 10000);
         $tarik = $this->makeTransaction($customer, TransactionType::TarikTunai, 5000);
 
-        $ids = (new TransactionExporter('tarik_tunai'))->query()->pluck('id')->all();
+        $query = Transaction::query()->where('type', 'tarik_tunai');
+        $ids = (new TransactionExporter($query))->query()->pluck('id')->all();
 
         $this->assertSame([$tarik->id], $ids);
     }
 
-    public function test_export_transaksi_filter_tanggal(): void
+    public function test_export_transaksi_memakai_query_yang_diberikan_filter_tanggal(): void
     {
         $this->actingAsRole('admin');
         $customer = $this->makeCustomer();
         $lama = $this->makeTransaction($customer, at: now()->subDays(10));
         $baru = $this->makeTransaction($customer);
 
-        $dariBaru = (new TransactionExporter(null, now()->subDays(2)->toDateString()))->query()->pluck('id')->all();
-        $this->assertSame([$baru->id], $dariBaru);
+        $dariBaru = Transaction::query()->whereDate('created_at', '>=', now()->subDays(2)->toDateString());
+        $ids = (new TransactionExporter($dariBaru))->query()->pluck('id')->all();
+        $this->assertSame([$baru->id], $ids);
 
-        $sampaiLama = (new TransactionExporter(null, null, now()->subDays(5)->toDateString()))->query()->pluck('id')->all();
-        $this->assertSame([$lama->id], $sampaiLama);
+        $sampaiLama = Transaction::query()->whereDate('created_at', '<=', now()->subDays(5)->toDateString());
+        $ids = (new TransactionExporter($sampaiLama))->query()->pluck('id')->all();
+        $this->assertSame([$lama->id], $ids);
     }
 
     public function test_export_transaksi_isi_baris(): void
@@ -86,7 +92,7 @@ class ExporterQueryTest extends BankTestCase
         $customer = $this->makeCustomer(['full_name' => 'Sari']);
         $this->makeTransaction($customer, TransactionType::SetorTunai, 10000);
 
-        $exporter = new TransactionExporter();
+        $exporter = new TransactionExporter(Transaction::query());
         $row = $exporter->map($exporter->query()->first());
 
         $this->assertSame('Sari', $row[2]);
@@ -97,11 +103,11 @@ class ExporterQueryTest extends BankTestCase
 
     public function test_kolom_diproses_oleh_berisi_nama_pegawai(): void
     {
-        // processed_by berisi teks nama ("Tester"), tetapi export membaca relasi processor() ke tabel users.
+        // processed_by berisi teks nama ("Tester"), exporter membaca kolom itu langsung.
         $this->actingAsRole('admin');
         $this->makeTransaction($this->makeCustomer());
 
-        $exporter = new TransactionExporter();
+        $exporter = new TransactionExporter(Transaction::query());
         $row = $exporter->map($exporter->query()->first());
 
         $this->assertSame('Tester', $row[6]);

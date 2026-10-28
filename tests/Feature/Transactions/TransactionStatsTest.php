@@ -25,7 +25,7 @@ class TransactionStatsTest extends BankTestCase
 
         if ($from || $until || $type) {
             try {
-                $component->dispatch('transaction-filters-updated', from: $from, until: $until, type: $type);
+                $component->dispatch('transaction-filters-changed', typeFilter: $type, dateFrom: $from, dateUntil: $until);
             } catch (\Throwable $e) {
                 // Widget belum punya pendengar event: filter tidak diterapkan, test gagal di angka (bukan error).
                 if (! str_contains($e::class, 'EventHandlerDoesNotExist')) {
