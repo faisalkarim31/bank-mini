@@ -35,7 +35,8 @@ class AboutBank extends Page
     {
         return [
             ['icon' => 'heroicon-o-users', 'teks' => 'Tidak diperkenankan menabung atas nama orang lain.'],
-            ['icon' => 'heroicon-o-circle-stack', 'teks' => 'Tidak diperkenankan menabung atas nama orang lain.'],
+            ['icon' => 'heroicon-o-circle-stack', 'teks' => 'Menabung minimal Rp 5.000
+setiap kali menabung.'],
             ['icon' => 'heroicon-o-arrow-path', 'teks' => 'Selalu cek jumlah saldo sebelum meninggalkan lokasi.'],
         ];
     }
